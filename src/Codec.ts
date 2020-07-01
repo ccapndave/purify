@@ -316,6 +316,50 @@ export const oneOf = <T extends Array<Codec<any>>>(
     schema: () => ({ oneOf: codecs.map((x) => x.schema()) })
   })
 
+export const matchedOneOf = <
+  T extends { matcher: Codec<any>; codec: Codec<any> }[],
+  E extends T[number]
+>(
+  codecs: T
+): Codec<
+  E extends { matcher: Codec<infer U>; codec: Codec<infer V> } ? U & V : never
+> =>
+  Codec.custom({
+    decode: (input) => {
+      let errors: string[] = []
+
+      for (const { matcher, codec } of codecs) {
+        const res = intersect(matcher, codec).decode(input)
+        if (res.isRight()) {
+          return res
+        } else {
+          errors.push(res.extract())
+        }
+      }
+
+      return Left(
+        `One of the following problems occured: ${errors
+          .map((err, i) => `(${i}) ${err}`)
+          .join(', ')}`
+      )
+    },
+    encode: (input) => {
+      for (const { matcher, codec } of codecs) {
+        const res = matcher.decode(input)
+        if (res.isRight()) {
+          return intersect(matcher, codec).encode(input)
+        }
+      }
+
+      return input
+    },
+    schema: () => ({
+      matchedOneOf: codecs.map(({ matcher, codec }) =>
+        intersect(matcher, codec).schema()
+      )
+    })
+  })
+
 /** A codec for an array */
 export const array = <T>(codec: Codec<T>): Codec<Array<T>> =>
   Codec.custom({

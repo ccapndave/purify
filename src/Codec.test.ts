@@ -3,6 +3,7 @@ import {
   number,
   string,
   oneOf,
+  matchedOneOf,
   nullType,
   boolean,
   unknown,
@@ -322,6 +323,57 @@ describe('Codec', () => {
       expect(fancyMockCodec.encode('')).toEqual('always!')
       expect(fancyMockCodec.encode(1)).toEqual(2)
       expect(fancyMockCodec.encode(true as any)).toEqual(true)
+    })
+  })
+
+  describe('matchedOneOf', () => {
+    type Adt = { tag: 'a'; x: number } | { tag: 'b'; y: number }
+
+    const stringToNumberCodec = Codec.custom<number>({
+      decode: (value) => string.decode(value).map(parseInt),
+      encode: (value) => value.toString()
+    })
+
+    const adtCodec: Codec<Adt> = matchedOneOf([
+      {
+        matcher: Codec.interface({ tag: exactly('a') }),
+        codec: Codec.interface({ x: stringToNumberCodec })
+      },
+      {
+        matcher: Codec.interface({ tag: exactly('b') }),
+        codec: Codec.interface({ y: stringToNumberCodec })
+      }
+    ])
+
+    test('decode', () => {
+      expect(adtCodec.decode(0)).toEqual(
+        Left(
+          'One of the following problems occured: (0) Expected an object, but received a number with value 0, (1) Expected an object, but received a number with value 0'
+        )
+      )
+      expect(adtCodec.decode([])).toEqual(
+        Left(
+          'One of the following problems occured: (0) Expected an object, but received an array with value [], (1) Expected an object, but received an array with value []'
+        )
+      )
+
+      expect(adtCodec.decode({ tag: 'a', x: '100' })).toEqual(
+        Right({ tag: 'a', x: 100 })
+      )
+      expect(adtCodec.decode({ tag: 'b', y: '200' })).toEqual(
+        Right({ tag: 'b', y: 200 })
+      )
+    })
+
+    test('encode', () => {
+      expect(adtCodec.encode({ tag: 'a', x: 100 })).toEqual({
+        tag: 'a',
+        x: '100'
+      })
+      expect(adtCodec.encode({ tag: 'b', y: 200 })).toEqual({
+        tag: 'b',
+        y: '200'
+      })
     })
   })
 
